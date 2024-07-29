@@ -1,0 +1,117 @@
+# ---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo
+  namespace: app
+  labels:
+    app: demo
+spec:
+  type: ClusterIP
+  ports:
+  - protocol: TCP
+    name: http-traffic
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: demo
+---
+# Source: microservice/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo
+  namespace: app
+spec:
+  strategy:
+    type: RollingUpdate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo
+  template:
+    metadata:
+      labels:
+        app: demo
+    spec:
+      containers:
+      - name: demo
+        image: azeastusbspdevnewobwacr.azurecr.io/java:26.07
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            cpu: 1
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 500Mi
+
+---
+# ############# INGRESS ################
+# # Source: microservice/templates/ingress.yaml
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: demo
+#   namespace: app
+#   annotations:
+#     nginx.ingress.kubernetes.io/backend-protocol: HTTP
+#     nginx.ingress.kubernetes.io/ssl-redirect: "false"
+#     nginx.ingress.kubernetes.io/use-regex: "true"
+# spec:
+#   ingressClassName: nginx
+#   rules:
+#   - http:
+#       paths:
+#       - path: /
+#         pathType: Prefix
+#         backend:
+#           service:
+#             name: demo
+#             port:
+#               number: 8080
+
+
+---
+############# ISTIO ################
+
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: demo-gateway
+  namespace: app
+spec:
+  selector:
+    istio: ingress # usa el controlador predeterminado de Istio
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*"
+
+---
+
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: demo
+  namespace: app
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - demo-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: demo
+        port:
+          number: 8080  
